@@ -1,12 +1,10 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY environment variable is required");
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error("GEMINI_API_KEY environment variable is required");
 }
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 interface CvAnalysisResult {
   score: number;
@@ -30,6 +28,8 @@ interface CvAnalysisResult {
 
 export async function analyzeCv(fileContent: string, fileName: string): Promise<CvAnalysisResult> {
   try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
     const prompt = `
 Analise este currículo em português brasileiro e forneça uma avaliação detalhada no formato JSON.
 
@@ -66,53 +66,49 @@ Responda em português brasileiro com o seguinte formato JSON:
 }
 
 Seja específico, construtivo e forneça sugestões práticas para melhorar o currículo.
+
+Arquivo: ${fileName}
+Conteúdo do currículo (base64): ${fileContent.substring(0, 2000)}...
 `;
 
-    // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "Você é um especialista em recursos humanos e análise de currículos. Forneça análises detalhadas e construtivas em português brasileiro."
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: prompt
-            },
-            {
-              type: "text", 
-              text: `Arquivo: ${fileName}\nConteúdo (base64): ${fileContent.substring(0, 1000)}...`
-            }
-          ]
-        }
-      ],
-      response_format: { type: "json_object" },
-      max_tokens: 2000,
-      temperature: 0.7
-    });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const analysisText = response.text();
 
-    const analysisText = response.choices[0].message.content;
     if (!analysisText) {
-      throw new Error("Resposta vazia da API OpenAI");
+      throw new Error("Resposta vazia da API Gemini");
     }
 
-    const analysis: CvAnalysisResult = JSON.parse(analysisText);
+    // Extract JSON from response (Gemini might include extra text)
+    const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Formato de resposta inválido da API Gemini");
+    }
+
+    const analysis: CvAnalysisResult = JSON.parse(jsonMatch[0]);
     
     // Validate and sanitize the response
     if (typeof analysis.score !== 'number' || analysis.score < 0 || analysis.score > 100) {
-      analysis.score = 50; // Default score
+      analysis.score = 70; // Default score
+    }
+
+    // Ensure arrays exist
+    if (!Array.isArray(analysis.strengths)) analysis.strengths = [];
+    if (!Array.isArray(analysis.weaknesses)) analysis.weaknesses = [];
+    if (!Array.isArray(analysis.suggestions)) analysis.suggestions = [];
+    if (!analysis.keywordOptimization) {
+      analysis.keywordOptimization = { missing: [], present: [] };
+    }
+    if (!analysis.formatFeedback) {
+      analysis.formatFeedback = { rating: 3, comments: [] };
     }
 
     return analysis;
 
   } catch (error) {
-    console.error("Error analyzing CV with OpenAI:", error);
+    console.error("Error analyzing CV with Gemini:", error);
     
-    // Return a fallback analysis if OpenAI fails
+    // Return a fallback analysis if Gemini fails
     return {
       score: 70,
       overallFeedback: "Não foi possível analisar completamente o currículo no momento. Tente novamente mais tarde.",
