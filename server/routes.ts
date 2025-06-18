@@ -37,24 +37,39 @@ const upload = multer({
 
 // Setup session middleware for local auth
 function setupLocalAuth(app: Express) {
-  const PostgresSessionStore = connectPg(session);
-  const sessionStore = new PostgresSessionStore({
-    pool,
-    createTableIfMissing: true,
-    tableName: "sessions"
-  });
+  try {
+    const PostgresSessionStore = connectPg(session);
+    const sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
+      tableName: "sessions"
+    });
 
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: false, // Set to true in production with HTTPS
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
-    },
-  }));
+    app.use(session({
+      secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: false, // Set to true in production with HTTPS
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+      },
+    }));
+  } catch (error) {
+    console.error("Session setup error:", error);
+    // Fallback to memory store if PostgreSQL session store fails
+    app.use(session({
+      secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: false,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    }));
+  }
 }
 
 // Custom authentication middleware
