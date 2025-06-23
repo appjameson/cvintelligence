@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Brain, Upload, Lightbulb, Rocket, CheckCircle, Star, Award, Users } from "lucide-react";
 import AnimatedSection from "@/components/AnimatedSection";
+import LoginModal from "@/components/modals/LoginModal";
+import UploadModal from "@/components/modals/UploadModal";
 
 export default function Landing() {
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white overflow-x-hidden">
