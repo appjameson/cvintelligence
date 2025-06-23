@@ -1,0 +1,108 @@
+﻿Gerado em: 22/06/2025 19:41:41
+=================================================
+
++-- client
+    +-- src
+        +-- components
+            +-- modals
+                +-- LoginModal.tsx
+                L-- UploadModal.tsx
+            +-- ui
+                +-- accordion.tsx
+                +-- alert.tsx
+                +-- alert-dialog.tsx
+                +-- aspect-ratio.tsx
+                +-- avatar.tsx
+                +-- badge.tsx
+                +-- breadcrumb.tsx
+                +-- button.tsx
+                +-- calendar.tsx
+                +-- card.tsx
+                +-- carousel.tsx
+                +-- chart.tsx
+                +-- checkbox.tsx
+                +-- collapsible.tsx
+                +-- command.tsx
+                +-- context-menu.tsx
+                +-- dialog.tsx
+                +-- drawer.tsx
+                +-- dropdown-menu.tsx
+                +-- form.tsx
+                +-- hover-card.tsx
+                +-- input.tsx
+                +-- input-otp.tsx
+                +-- label.tsx
+                +-- menubar.tsx
+                +-- navigation-menu.tsx
+                +-- pagination.tsx
+                +-- popover.tsx
+                +-- progress.tsx
+                +-- radio-group.tsx
+                +-- resizable.tsx
+                +-- scroll-area.tsx
+                +-- select.tsx
+                +-- separator.tsx
+                +-- sheet.tsx
+                +-- sidebar.tsx
+                +-- skeleton.tsx
+                +-- slider.tsx
+                +-- switch.tsx
+                +-- table.tsx
+                +-- tabs.tsx
+                +-- textarea.tsx
+                +-- toast.tsx
+                +-- toaster.tsx
+                +-- toggle.tsx
+                +-- toggle-group.tsx
+                L-- tooltip.tsx
+            +-- AnalysisResultCard.tsx
+            L-- AnimatedSection.tsx
+        +-- hooks
+            +-- useAuth.ts
+            +-- use-mobile.tsx
+            L-- use-toast.ts
+        +-- lib
+            +-- authUtils.ts
+            +-- queryClient.ts
+            L-- utils.ts
+        +-- pages
+            +-- analysis.tsx
+            +-- auth.tsx
+            +-- checkout.tsx
+            +-- home.tsx
+            +-- landing.tsx
+            L-- not-found.tsx
+        +-- App.tsx
+        +-- index.css
+        L-- main.tsx
+    L-- index.html
++-- server
+    +-- services
+        L-- openai.ts
+    +-- db.ts
+    +-- index.ts
+    +-- replitAuth.ts
+    +-- routes.ts
+    +-- storage.ts
+    L-- vite.ts
++-- shared
+    L-- schema.ts
++-- uploads
++-- .env
++-- .env.docker
++-- .gitignore
++-- .replit
++-- components.json
++-- docker-compose.yml
++-- Dockerfile
++-- drizzle.config.ts
++-- estrutura_projeto.txt
++-- gerador_estrutura.bat
++-- migration.sql
++-- package.json
++-- package-lock.json
++-- postcss.config.js
++-- replit.md
++-- tailwind.config.ts
++-- tsconfig.json
+L-- vite.config.ts

@@ -10,30 +10,36 @@ import Home from "@/pages/home";
 import Analysis from "@/pages/analysis";
 import Checkout from "@/pages/checkout";
 import AuthPage from "@/pages/auth";
+import AdminPage from "./pages/admin";
+import AdminLayout from "./layouts/AdminLayout";
+
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  // ... (código de loading) ...
 
-  return (
-    <Switch>
-      {!isAuthenticated ? (
+  return (
+    <Switch>
+      {/* Rotas para usuários não autenticados */}
+      {!isAuthenticated ? (
         <>
           <Route path="/" component={Landing} />
           <Route path="/auth" component={AuthPage} />
         </>
       ) : (
         <>
+          {/* Rotas para usuários autenticados */}
           <Route path="/" component={Home} />
           <Route path="/analysis/:id" component={Analysis} />
           <Route path="/checkout" component={Checkout} />
+
+          {/* Rota para a área de Admin, agora usando o Layout */}
+          <Route path="/admin">
+            <AdminLayout>
+              <AdminPage />
+            </AdminLayout>
+          </Route>
         </>
       )}
       <Route component={NotFound} />

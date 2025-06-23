@@ -11,6 +11,10 @@ import Stripe from "stripe";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import { db } from './db';
+import { sql } from "drizzle-orm";
+import { sendEmail } from './services/email'
+import { DEFAULT_CV_ANALYSIS_PROMPT } from './services/openai';
 
 if (!process.env.STRIPE_SECRET_KEY) {
   console.warn('STRIPE_SECRET_KEY not set. Payment functionality will be disabled.');
@@ -80,6 +84,22 @@ function requireAuth(req: any, res: any, next: any) {
   return res.status(401).json({ message: "Unauthorized" });
 }
 
+async function requireAdmin(req: any, res: any, next: any) {
+  const userId = req.session.userId;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const user = await storage.getUser(userId);
+  if (user && user.isAdmin) {
+    // Se o usuário existe e é admin, pode prosseguir
+    return next();
+  }
+
+  // Se não for admin, retorna erro de "Acesso Proibido"
+  return res.status(403).json({ message: "Forbidden: Acesso restrito a administradores." });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup local authentication
   setupLocalAuth(app);
@@ -87,21 +107,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize admin user
   await storage.initializeAdminUser();
 
+  app.get('/api/admin/settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      // Busca as configurações do banco
+      let geminiKey = await storage.getSetting('GEMINI_API_KEY');
+      let stripeKey = await storage.getSetting('STRIPE_SECRET_KEY');
+      let geminiPrompt = await storage.getSetting('GEMINI_PROMPT_CV_ANALYSIS');
+      let geminiModel = await storage.getSetting('GEMINI_MODEL_NAME');
+
+      // Se não houver um prompt salvo no banco, usamos o padrão do código
+      if (!geminiPrompt) {
+        geminiPrompt = DEFAULT_CV_ANALYSIS_PROMPT;
+      }
+
+      res.json({
+        GEMINI_API_KEY: geminiKey,
+        STRIPE_SECRET_KEY: stripeKey,
+        GEMINI_PROMPT_CV_ANALYSIS: geminiPrompt,
+        GEMINI_MODEL_NAME: geminiModel,
+      });
+    } catch (error) { // <-- O bloco CATCH que estava faltando ou no lugar errado
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ message: 'Erro ao buscar configurações.' });
+    }
+  });
+
+  app.post('/api/admin/settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      // A desestruturação continua a mesma
+      const { geminiKey, stripeKey, geminiPrompt, geminiModel } = req.body;
+
+      if ('geminiKey' in req.body) {
+        // O await aqui garante que esperamos a operação terminar antes de continuar
+        await storage.updateSetting('GEMINI_API_KEY', geminiKey);
+      }
+      if ('stripeKey' in req.body) {
+        await storage.updateSetting('STRIPE_SECRET_KEY', stripeKey);
+      }
+      if ('geminiPrompt' in req.body) {
+        await storage.updateSetting('GEMINI_PROMPT_CV_ANALYSIS', geminiPrompt);
+      }
+      if ('geminiModel' in req.body) {
+        await storage.updateSetting('GEMINI_MODEL_NAME', geminiModel);
+      }
+
+      for (const key in req.body) {
+        if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+          await storage.updateSetting(key, req.body[key]);
+        }
+      }
+      res.status(200).json({ message: 'Configurações salvas com sucesso!' });
+      
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      res.status(500).json({ message: 'Erro ao salvar configurações.' });
+    }
+  });
+
   // Manual auth routes
   app.post('/api/register', async (req, res) => {
     try {
+      const allowSignups = await storage.getSetting('ALLOW_NEW_REGISTRATIONS');
+      if (allowSignups === 'false') {
+        return res.status(403).json({ message: 'Novos cadastros estão temporariamente desabilitados pela administração.' });
+      }
+
       const userData = registerUserSchema.parse(req.body);
       
-      // Check if user already exists
       const existingUser = await storage.getUserByEmail(userData.email);
       if (existingUser) {
         return res.status(400).json({ message: "Usuário já existe com este email" });
       }
-
       const user = await storage.createUser(userData);
-      
-      // Set session
       (req.session as any).userId = user.id;
+
+      const requireConfirmation = await storage.getSetting('REQUIRE_EMAIL_CONFIRMATION');
+      if (requireConfirmation === 'true') {
+        await sendEmail({
+          to: user.email,
+          subject: 'Bem-vindo ao CVIntelligence - Confirme seu E-mail',
+          html: `<h1>Bem-vindo, ${user.firstName}!</h1><p>Obrigado por se cadastrar. Por favor, clique no link para confirmar seu e-mail.</p>`
+        });
+      }
       
       res.status(201).json({
         id: user.id,
@@ -111,6 +198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         credits: user.credits,
         isAdmin: user.isAdmin
       });
+
     } catch (error) {
       console.error("Registration error:", error);
       res.status(400).json({ 
@@ -206,7 +294,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fileContent = fs.readFileSync(filePath, 'base64');
       
       // Analyze CV with OpenAI
-      const analysis = await analyzeCv(fileContent, req.file.originalname);
+      const analysis = await analyzeCv(fileContent, req.file.originalname, req.body.targetRole);
+
+      if (!analysis.isResume) {
+        // Limpa o arquivo enviado
+        fs.unlinkSync(filePath);
+        // Retorna um erro para o usuário
+        return res.status(400).json({ message: "O arquivo enviado não parece ser um currículo." });
+      }
       
       // Save analysis to database
       const cvAnalysis = await storage.createCvAnalysis({
@@ -315,13 +410,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const paymentIntent = event.data.object;
           const userId = paymentIntent.metadata.userId;
           const credits = parseInt(paymentIntent.metadata.credits);
+          const packageName = paymentIntent.metadata.packageName; // Precisaremos adicionar isso
           
           const user = await storage.getUser(userId);
           if (user) {
+            // A lógica de atualizar os créditos do usuário continua
             await storage.updateUserCredits(userId, user.credits + credits);
+            
+            // ADICIONE A LÓGICA PARA REGISTRAR A COMPRA
+            await storage.logCreditPurchase({
+              userId,
+              packageName: packageName || 'desconhecido',
+              creditsPurchased: credits,
+              amountPaid: paymentIntent.amount,
+              stripePaymentIntentId: paymentIntent.id,
+            });
           }
         }
-        
         res.json({ received: true });
       } catch (err: any) {
         console.error('Webhook error:', err.message);
@@ -329,6 +434,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   }
+
+  app.get('/api/admin/user-stats', requireAuth, requireAdmin, async (req, res) => {
+    const period = req.query.period as 'day' | 'week' | 'month' || 'day';
+    try {
+      const stats = await storage.getComparativeUserStats(period);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: 'Erro ao buscar estatísticas de usuários.' });
+    }
+  });
+
+  app.get('/api/admin/db-status', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      // Tenta executar a consulta mais simples possível no banco
+      await db.execute(sql`SELECT 1`);
+      res.json({ status: 'ok', message: 'Conexão com o banco de dados bem-sucedida.' });
+    } catch (error) {
+      console.error("Database connection check failed:", error);
+      res.status(500).json({ status: 'error', message: 'Não foi possível conectar ao banco de dados.' });
+    }
+  });
+
+  // Rota de exemplo para administradores
+  app.get('/api/admin/dashboard-data', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    // Busca todos os dados reais do banco de dados
+    const totalUsers = await storage.getTotalUsers();
+    const analysesToday = await storage.getAnalysesCountToday();
+    const averageScore = await storage.getAverageScore();
+    const newUsersToday = await storage.getNewUsersCountToday();
+    const packageCounts = await storage.getPackagePurchaseCounts();
+
+    res.json({
+      message: "Dados do dashboard carregados com sucesso!",
+      totalUsers,
+      analysesToday,
+      averageScore,
+      packageCounts,
+      newUsersToday
+    });
+  } catch (error) {
+    console.error("Error fetching admin dashboard data:", error);
+    res.status(500).json({ message: 'Erro ao buscar dados do dashboard.' });
+  }
+});
 
   const httpServer = createServer(app);
   return httpServer;

@@ -1,11 +1,32 @@
+import React, { useState } from 'react';
+import LoginModal from '../components/modals/LoginModal';
+import UploadModal from '../components/modals/UploadModal';
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Brain, Upload, Lightbulb, Rocket, CheckCircle, Star, Award, Users } from "lucide-react";
 import AnimatedSection from "@/components/AnimatedSection";
+import AnalysisResultCard from '@/components/AnalysisResultCard';
 
 export default function Landing() {
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  const dadosDoCard = {
+  userName: "Ana Silva",
+  userTitle: "Desenvolvedora Full Stack",
+  userContact: "São Paulo, SP • ana.silva@email.com",
+  overallScore: "8.5/10",
+  suggestion: "Adicione certificações em Python",
+  scoreItems: [
+    { title: "Experiência Profissional", description: "5 anos • Tecnologia", score: "9.2/10", icon: 'check' as const },
+    { title: "Formação Acadêmica", description: "Ciência da Computação • USP", score: "8.8/10", icon: 'check' as const },
+    { title: "Habilidades Técnicas", description: "Melhore suas habilidades em Python", score: "7.5/10", icon: 'exclamation' as const },
+    { title: "Idiomas", description: "Português, Inglês Avançado", score: "9.0/10", icon: 'check' as const }
+  ]
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white overflow-x-hidden">
@@ -22,7 +43,7 @@ export default function Landing() {
               <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                 <Brain className="text-white" size={20} />
               </div>
-              <span className="text-xl font-bold text-slate-900">CVAnalyzer</span>
+              <span className="text-xl font-bold text-slate-900">cvintelligence</span>
             </motion.div>
             
             <div className="hidden md:flex items-center space-x-8">
@@ -78,7 +99,7 @@ export default function Landing() {
                 transition={{ duration: 0.8, delay: 0.6 }}
               >
                 <Button
-                  onClick={() => setShowUploadModal(true)}
+                  onClick={() => setShowLoginModal(true)}
                   size="lg"
                   className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl text-lg font-semibold apple-shadow-lg hover-lift"
                 >
@@ -109,23 +130,9 @@ export default function Landing() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1, delay: 0.8 }}
           >
-            <Card className="bg-white rounded-3xl p-8 apple-shadow-lg mx-auto max-w-2xl">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full"></div>
-                <div>
-                  <div className="h-4 bg-slate-200 rounded-full w-32 mb-2"></div>
-                  <div className="h-3 bg-slate-200 rounded-full w-24"></div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="h-3 bg-slate-200 rounded-full w-full"></div>
-                <div className="h-3 bg-slate-200 rounded-full w-4/5"></div>
-                <div className="h-3 bg-slate-200 rounded-full w-3/4"></div>
-              </div>
-              <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center animate-bounce-subtle">
-                <CheckCircle size={16} />
-              </div>
-            </Card>
+            <div className="bg-white-800 py-12">
+                <AnalysisResultCard data={dadosDoCard} />
+            </div>
           </motion.div>
         </div>
       </section>
@@ -136,7 +143,7 @@ export default function Landing() {
           <AnimatedSection>
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-6">
-                Por que escolher o CVAnalyzer?
+                Por que escolher o cvintelligence?
               </h2>
               <p className="text-xl text-slate-600 max-w-3xl mx-auto">
                 Nossa inteligência artificial avalia cada aspecto do seu currículo,
@@ -355,7 +362,7 @@ export default function Landing() {
               Junte-se a milhares de profissionais que já melhoraram seus currículos com nossa IA. Comece hoje mesmo!
             </p>
             <Button
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => setShowLoginModal(true)}
               size="lg"
               className="bg-white text-blue-500 px-8 py-4 rounded-2xl text-lg font-semibold hover:bg-gray-50 apple-shadow-lg hover-lift"
             >
@@ -375,7 +382,7 @@ export default function Landing() {
                 <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                   <Brain className="text-white" size={20} />
                 </div>
-                <span className="text-xl font-bold">CVAnalyzer</span>
+                <span className="text-xl font-bold">cvintelligence</span>
               </div>
               <p className="text-white/70 mb-4 max-w-md">
                 Transforme seu currículo com inteligência artificial e conquiste a vaga dos seus sonhos.
@@ -402,7 +409,7 @@ export default function Landing() {
           </div>
           
           <div className="border-t border-white/20 mt-12 pt-8 text-center">
-            <p className="text-white/70">&copy; 2024 CVAnalyzer. Todos os direitos reservados.</p>
+            <p className="text-white/70">&copy; 2024 cvintelligence. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>

@@ -1,20 +1,28 @@
 import {
   users,
   cvAnalyses,
+  sessions,
+  appSettings,
+  creditPurchases,
   type User,
   type UpsertUser,
   type InsertUser,
   type LoginUser,
   type InsertCvAnalysis,
   type CvAnalysis,
-} from "@shared/schema";
+  type InsertCreditPurchase // Agora este import vai funcionar
+} from "../shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count, avg, sql } from "drizzle-orm";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { nanoid } from "nanoid";
 
+
+type UserStats = { date: string; count: number };
+
 const scryptAsync = promisify(scrypt);
+
 
 // Interface for storage operations
 export interface IStorage {
@@ -31,6 +39,8 @@ export interface IStorage {
   createCvAnalysis(analysis: InsertCvAnalysis): Promise<CvAnalysis>;
   getUserCvAnalyses(userId: string): Promise<CvAnalysis[]>;
   getCvAnalysis(id: number): Promise<CvAnalysis | undefined>;
+
+  logCreditPurchase(data: InsertCreditPurchase): Promise<void>;
 }
 
 async function hashPassword(password: string): Promise<string> {
@@ -47,6 +57,99 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
 }
 
 export class DatabaseStorage implements IStorage {
+
+  async logCreditPurchase(data: InsertCreditPurchase): Promise<void> {
+    await db.insert(creditPurchases).values(data);
+  }
+
+  async getPackagePurchaseCounts(): Promise<{ name: string; count: number }[]> {
+    const result = await db
+      .select({
+        name: creditPurchases.packageName,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(creditPurchases)
+      .groupBy(creditPurchases.packageName);
+    return result;
+  }
+
+
+  async getComparativeUserStats(period: 'day' | 'week' | 'month'): Promise<any[]> {
+    let interval = '1 day';
+    let format = 'DD/MM';
+    let periodsToCompare = 7; // Compara os últimos 7 dias por padrão
+
+    if (period === 'week') {
+      interval = '1 week';
+      format = 'W'; // Número da semana
+      periodsToCompare = 8; // 8 semanas
+    } else if (period === 'month') {
+      interval = '1 month';
+      format = 'Mon'; // Nome do mês abreviado
+      periodsToCompare = 12; // 12 meses
+    }
+
+    const query = sql`
+      WITH periods AS (
+        SELECT generate_series(
+          DATE_TRUNC(${period}, NOW() - INTERVAL '${sql.raw(`${periodsToCompare - 1} ${period}`)}'),
+          DATE_TRUNC(${period}, NOW()),
+          INTERVAL '1 ${sql.raw(period)}'
+        ) AS period_start
+      )
+      SELECT
+        TO_CHAR(p.period_start, ${format}) AS date,
+        (SELECT count(*) FROM users WHERE DATE_TRUNC(${period}, "created_at") = p.period_start) AS current
+      FROM periods p
+      ORDER BY p.period_start;
+    `;
+
+    const result = await db.execute(query);
+    return result.rows;
+  }
+
+
+  async getAverageScore(): Promise<number> {
+    const [result] = await db.select({ value: avg(cvAnalyses.score) }).from(cvAnalyses);
+    // O avg pode retornar null se não houver análises, então tratamos isso.
+    // O toFixed(0) arredonda para o inteiro mais próximo.
+    return result.value ? parseFloat(parseFloat(result.value).toFixed(0)) : 0;
+  }
+
+  async getNewUsersCountToday(): Promise<number> {
+    const [result] = await db.select({ value: count() }).from(users).where(
+      // Compara se a data de criação é hoje
+      sql`date("created_at") = CURRENT_DATE`
+    );
+    return result.value;
+  }
+
+  async getTotalUsers(): Promise<number> {
+    const [result] = await db.select({ value: count() }).from(users);
+    return result.value;
+  }
+
+  async getAnalysesCountToday(): Promise<number> {
+    // Esta função é mais complexa e precisaria de uma cláusula WHERE para a data.
+    // Por simplicidade, vamos contar todas as análises por enquanto.
+    const [result] = await db.select({ value: count() }).from(cvAnalyses);
+    return result.value;
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting?.value ?? null;
+  }
+
+  async updateSetting(key: string, value: string): Promise<void> {
+    await db.insert(appSettings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value },
+      });
+  }
+  
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));

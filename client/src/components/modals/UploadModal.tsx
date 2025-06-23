@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ interface AnalysisResponse {
 
 export default function UploadModal({ open, onClose }: UploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [targetRole, setTargetRole] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
@@ -34,6 +37,7 @@ export default function UploadModal({ open, onClose }: UploadModalProps) {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('cv', file);
+      formData.append('targetRole', targetRole)
       
       const response = await fetch('/api/upload-cv', {
         method: 'POST',
@@ -214,7 +218,7 @@ export default function UploadModal({ open, onClose }: UploadModalProps) {
             {selectedFile ? (
               <div className="space-y-2">
                 <FileText className="mx-auto text-green-500" size={48} />
-                <p className="font-semibold text-slate-900">{selectedFile.name}</p>
+                <p className="font-semibold text-slate-900 truncate w-full max-w-xs mx-auto">{selectedFile.name}</p>
                 <p className="text-sm text-slate-600">
                   {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                 </p>
@@ -239,6 +243,22 @@ export default function UploadModal({ open, onClose }: UploadModalProps) {
                 <p className="text-sm text-slate-600">Máximo 5MB</p>
               </div>
             )}
+          </div>
+
+          {/* Target Role Input */}
+          <div className="space-y-1">
+            <Label htmlFor="targetRole" className="font-semibold">Vaga ou Área de Interesse (Opcional)</Label>
+            <Input
+              id="targetRole"
+              name="targetRole"
+              type="text"
+              placeholder="Ex: Desenvolvedor Frontend React"
+              value={targetRole}
+              onChange={(e) => setTargetRole(e.target.value)}
+              className="mt-1 rounded-2xl"
+              disabled={uploadMutation.isPending}
+            />
+            <p className="text-xs text-slate-500">Fornecer uma vaga torna a análise mais precisa.</p>
           </div>
 
           {/* Credits Info */}
@@ -303,15 +323,7 @@ export default function UploadModal({ open, onClose }: UploadModalProps) {
           </Button>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-4 top-4"
-          onClick={handleClose}
-          disabled={uploadMutation.isPending}
-        >
-          <X size={20} />
-        </Button>
+        
       </DialogContent>
     </Dialog>
   );

@@ -9,6 +9,7 @@ import { Brain, Upload, FileText, Star, CreditCard, LogOut, Clock, TrendingUp } 
 import { useLocation } from "wouter";
 import UploadModal from "@/components/modals/UploadModal";
 import { useToast } from "@/hooks/use-toast";
+import { Settings } from "lucide-react";
 
 interface CvAnalysis {
   id: number;
@@ -26,7 +27,7 @@ interface CvAnalysis {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -36,7 +37,7 @@ export default function Home() {
   });
 
   const handleLogout = () => {
-    window.location.href = "/api/logout";
+    logout(); // Simplesmente chamamos a função do hook
   };
 
   const handleViewAnalysis = (id: number) => {
@@ -69,10 +70,16 @@ export default function Home() {
               <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
                 <Brain className="text-white" size={20} />
               </div>
-              <span className="text-xl font-bold text-slate-900">CVAnalyzer</span>
+              <span className="text-xl font-bold text-slate-900">cvintelligence</span>
             </div>
 
             <div className="flex items-center space-x-4">
+              {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={() => setLocation('/admin')}>
+                    <Settings size={16} className="mr-2" />
+                    Admin
+                  </Button>
+                )}
               <div className="flex items-center space-x-2 text-sm text-slate-600">
                 <CreditCard size={16} />
                 <span>{user?.credits || 0} créditos</span>

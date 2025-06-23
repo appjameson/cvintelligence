@@ -8,6 +8,16 @@ export function useAuth() {
 
   const { data: user, isLoading, error } = useQuery({
     queryKey: ["/api/auth/user"],
+    queryFn: async () => {
+      const response = await fetch('/api/auth/user');
+      if (response.status === 401 || response.status === 403) {
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error("Falha ao buscar dados do usuário");
+      }
+      return response.json();
+        },
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -84,6 +94,7 @@ export function useAuth() {
     user,
     isLoading,
     isAuthenticated: !!user,
+    isAdmin: !!user?.isAdmin,
     error,
     register: registerMutation.mutate,
     login: loginMutation.mutate,

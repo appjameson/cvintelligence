@@ -1,4 +1,6 @@
+import { useAuth } from "@/hooks/useAuth"; // Garanta que este import esteja aqui
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +14,16 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ open, onClose }: LoginModalProps) {
+  const { toast } = useToast();
+  const { login, register, isLoggingIn, isRegistering } = useAuth();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '', // Mude de 'name' para 'firstName'
+    lastName: '',  // Adicione 'lastName'
     email: '',
     password: ''
   });
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleGoogleLogin = () => {
     window.location.href = '/api/login';
@@ -25,8 +31,22 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement manual login/register
-    console.log('Form submitted:', formData);
+    
+    // ADICIONE ESTA VALIDAÇÃO
+    if (isRegisterMode && formData.password !== confirmPassword) {
+      toast({
+        title: "Erro no cadastro",
+        description: "As senhas não coincidem.",
+        variant: "destructive",
+      });
+      return; // Impede o envio do formulário
+    }
+
+    if (isRegisterMode) {
+      register(formData);
+    } else {
+      login({ email: formData.email, password: formData.password });
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,8 +58,10 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
 
   const toggleMode = () => {
     setIsRegisterMode(!isRegisterMode);
-    setFormData({ name: '', email: '', password: '' });
+    setFormData({ firstName: '', lastName: '', email: '', password: '' });
   };
+
+  const isLoading = isLoggingIn || isRegistering;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -83,22 +105,41 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
 
           {/* Manual Login/Register Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Seção de Nome e Sobrenome (só aparece no modo de registro) */}
             {isRegisterMode && (
-              <div>
-                <Label htmlFor="name">Nome completo</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="mt-1 rounded-2xl"
-                  placeholder="Digite seu nome completo"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName">Nome</Label>
+                  <Input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    className="mt-1 rounded-2xl"
+                    placeholder="Seu nome"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lastName">Sobrenome</Label>
+                  <Input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    className="mt-1 rounded-2xl"
+                    placeholder="Seu sobrenome"
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
               </div>
             )}
 
+            {/* Campo de E-mail */}
             <div>
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -110,9 +151,11 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
                 className="mt-1 rounded-2xl"
                 placeholder="Digite seu e-mail"
                 required
+                disabled={isLoading}
               />
             </div>
 
+            {/* Campo de Senha */}
             <div>
               <Label htmlFor="password">Senha</Label>
               <Input
@@ -124,14 +167,36 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
                 className="mt-1 rounded-2xl"
                 placeholder="Digite sua senha"
                 required
+                disabled={isLoading}
               />
             </div>
+            
+            {/* ---- NOVO CAMPO "CONFIRMAR SENHA" ADICIONADO AQUI ---- */}
+            {/* Ele só aparece no modo de registro */}
+            {isRegisterMode && (
+              <div>
+                <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="mt-1 rounded-2xl"
+                  placeholder="Digite sua senha novamente"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+            )}
 
+            {/* Botão de Submit */}
             <Button 
               type="submit"
               className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-2xl"
+              disabled={isLoading}
             >
-              {isRegisterMode ? 'Criar Conta' : 'Entrar'}
+              {isLoading ? 'Aguarde...' : (isRegisterMode ? 'Criar Conta' : 'Entrar')}
             </Button>
           </form>
 
@@ -149,14 +214,6 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-4 top-4"
-          onClick={onClose}
-        >
-          <X size={20} />
-        </Button>
       </DialogContent>
     </Dialog>
   );

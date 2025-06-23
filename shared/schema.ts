@@ -12,6 +12,11 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key").primaryKey(), // Ex: "GEMINI_API_KEY"
+  value: text("value").notNull(),   // O valor da chave
+});
+
 // Session storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessions = pgTable(
@@ -23,6 +28,16 @@ export const sessions = pgTable(
   },
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
+
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  packageName: varchar("package_name").notNull(), // 'básico', 'premium', 'profissional'
+  creditsPurchased: integer("credits_purchased").notNull(),
+  amountPaid: integer("amount_paid").notNull(), // Em centavos
+  stripePaymentIntentId: varchar("stripe_payment_intent_id").unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // User storage table.
 export const users = pgTable("users", {
@@ -81,6 +96,9 @@ export const insertCvAnalysisSchema = createInsertSchema(cvAnalyses).omit({
   id: true,
   createdAt: true,
 });
+
+export const insertCreditPurchaseSchema = createInsertSchema(creditPurchases);
+export type InsertCreditPurchase = z.infer<typeof insertCreditPurchaseSchema>;
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
