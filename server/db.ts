@@ -1,14 +1,18 @@
-import pkg from 'pg';
+import pkg from "pg";
 const { Pool } = pkg;
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 
+// Configure PostgreSQL connection for external database
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is required");
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  );
 }
 
-export const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: false,
 });
 
 export const db = drizzle(pool, { schema });

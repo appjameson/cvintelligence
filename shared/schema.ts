@@ -7,10 +7,16 @@ import {
   index,
   integer,
   boolean,
-  serial
+  serial,
+  type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key").primaryKey(), // Ex: "GEMINI_API_KEY"
+  value: text("value").notNull(),   // O valor da chave
+});
 
 // Session storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
@@ -23,6 +29,16 @@ export const sessions = pgTable(
   },
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
+
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  packageName: varchar("package_name").notNull(), // 'básico', 'premium', 'profissional'
+  creditsPurchased: integer("credits_purchased").notNull(),
+  amountPaid: integer("amount_paid").notNull(), // Em centavos
+  stripePaymentIntentId: varchar("stripe_payment_intent_id").unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // User storage table.
 export const users = pgTable("users", {
@@ -44,6 +60,7 @@ export const users = pgTable("users", {
 export const cvAnalyses = pgTable("cv_analyses", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id),
+  previousAnalysisId: integer("previous_analysis_id").references((): AnyPgColumn => cvAnalyses.id),
   fileName: varchar("file_name").notNull(),
   fileSize: integer("file_size").notNull(),
   analysisResult: jsonb("analysis_result").notNull(),
@@ -82,9 +99,17 @@ export const insertCvAnalysisSchema = createInsertSchema(cvAnalyses).omit({
   createdAt: true,
 });
 
+export const insertCreditPurchaseSchema = createInsertSchema(creditPurchases);
+export type InsertCreditPurchase = z.infer<typeof insertCreditPurchaseSchema>;
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof registerUserSchema>;
 export type LoginUser = z.infer<typeof loginUserSchema>;
 export type InsertCvAnalysis = z.infer<typeof insertCvAnalysisSchema>;
 export type CvAnalysis = typeof cvAnalyses.$inferSelect;
+export const analysisResultSchema = z.object({
+  weaknesses: z.array(z.string()).optional(),
+  suggestions: z.array(z.any()).optional(),
+  // Adicione outras propriedades de analysisResult que você usa, se necessário
+});

@@ -1,4 +1,3 @@
-import ResumeHighlightsCard from "@/components/ResumeHighlightsCard";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -7,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import ActionableExampleCard from "@/components/ActionableExampleCard";
-import ComparativeFeedbackCard from "@/components/ComparativeFeedbackCard";
 import { 
   ArrowLeft, 
   FileText, 
@@ -21,12 +18,6 @@ import {
   Award
 } from "lucide-react";
 import { useLocation } from "wouter";
-
-interface ActionableExample {
-  before: string;
-  after: string;
-  explanation: string;
-}
 
 interface CvAnalysis {
   id: number;
@@ -49,26 +40,6 @@ interface CvAnalysis {
     formatFeedback: {
       rating: number;
       comments: string[];
-    };
-    actionableExamples: ActionableExample[];
-    scoreDetails: {
-      clarity: number;
-      experienceImpact: number;
-      relevance: number;
-      skills: number;
-      formatting: number;
-    };
-    extractedData: {
-      name?: string;
-      email?: string;
-      phone?: string;
-      summary?: string;
-      recentExperience?: string;
-    };
-    // ADICIONE A PROPRIEDADE OPCIONAL AQUI:
-    comparativeFeedback?: {
-      improvementsMade: string[];
-      pointsToStillImprove: string[];
     };
   };
 }
@@ -190,68 +161,31 @@ export default function Analysis() {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Pontuação Geral</h2>
                 <p className="text-slate-600 mb-6 max-w-2xl mx-auto">
-                    {analysis.analysisResult.overallFeedback}
+                  {analysis.analysisResult.overallFeedback}
                 </p>
-                {/* Verificação de segurança para só mostrar se scoreDetails existir */}
-                {analysis.analysisResult.scoreDetails && (
-                  <>
-                    <Separator className="my-6" />
-                    <div className="flex justify-around items-center text-center max-w-lg mx-auto">
-                      {/* Métrica de Formato*/}
-                      <div className="flex flex-col items-center">
-                        <Award className="text-blue-500 mb-3" size={28} />
-                        <p className="text-base font-medium text-slate-600 mb-2">Formato</p>
-                        <p className="text-3xl font-bold text-blue-600">
-                          {(((analysis.analysisResult.scoreDetails.formatting + analysis.analysisResult.scoreDetails.clarity) / 30) * 5).toFixed(1)}
-                          <span className="text-lg text-slate-500">/5</span>
-                        </p>
-                      </div>
-
-                      {/* Métrica de Conteúdo */}
-                      <div className="flex flex-col items-center">
-                        <Star className="text-yellow-500 mb-3" size={28} />
-                        <p className="text-base font-medium text-slate-600 mb-2">Conteúdo</p>
-                        <p className="text-3xl font-bold text-yellow-500">
-                          {(((analysis.analysisResult.scoreDetails.experienceImpact + analysis.analysisResult.scoreDetails.skills) / 45) * 5).toFixed(1)}
-                          <span className="text-lg text-slate-500">/5</span>
-                        </p>
-                      </div>
-
-                      {/* Métrica de Otimização */}
-                      <div className="flex flex-col items-center">
-                        <TrendingUp className="text-green-500 mb-3" size={28} />
-                        <p className="text-base font-medium text-slate-600 mb-2">Otimização</p>
-                        <p className="text-3xl font-bold text-green-500">
-                          {((analysis.analysisResult.scoreDetails.relevance / 25) * 5).toFixed(1)}
-                          <span className="text-lg text-slate-500">/5</span>
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div className="flex justify-center space-x-8">
+                  <div className="text-center">
+                    <Award className="text-blue-500 mx-auto mb-2" size={24} />
+                    <p className="text-sm text-slate-600">Formato</p>
+                    <p className="font-semibold">{analysis.analysisResult.formatFeedback.rating}/5</p>
+                  </div>
+                  <div className="text-center">
+                    <Star className="text-yellow-500 mx-auto mb-2" size={24} />
+                    <p className="text-sm text-slate-600">Conteúdo</p>
+                    <p className="font-semibold">{Math.round(analysis.score / 20)}/5</p>
+                  </div>
+                  <div className="text-center">
+                    <TrendingUp className="text-green-500 mx-auto mb-2" size={24} />
+                    <p className="text-sm text-slate-600">Otimização</p>
+                    <p className="font-semibold">
+                      {analysis.analysisResult.keywordOptimization.present.length > 5 ? '5' : analysis.analysisResult.keywordOptimization.present.length}/5
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
         </motion.div>
-        
-        {/* Resumo Extraído pela IA */}
-        {analysis.analysisResult.extractedData && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="mb-8">
-            <ResumeHighlightsCard data={analysis.analysisResult.extractedData} />
-          </motion.div>
-        )}
-
-        {/* Card de Análise Comparativa - AGORA CORRIGIDO */}
-        {analysis.analysisResult.comparativeFeedback && (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mb-8" // Removido o 'mt-8' duplicado
-          >
-            <ComparativeFeedbackCard data={analysis.analysisResult.comparativeFeedback} />
-          </motion.div> // A tag de fechamento estava implícita ou faltando
-        )}
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Strengths */}
@@ -353,31 +287,6 @@ export default function Analysis() {
             </CardContent>
           </Card>
         </motion.div>
-
-        {/* Seção de Exemplos Práticos (Antes e Depois) */}
-        {analysis.analysisResult.actionableExamples && analysis.analysisResult.actionableExamples.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-            className="mt-8"
-          >
-            <Card className="apple-shadow">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Lightbulb className="mr-2 text-blue-500" size={24} />
-                  Sugestões na Prática (Antes e Depois)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {analysis.analysisResult.actionableExamples.map((example: ActionableExample, index: number) => (
-                  <ActionableExampleCard key={index} example={example} />
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-
 
         {/* Keywords Analysis */}
         <div className="grid lg:grid-cols-2 gap-8 mt-8">

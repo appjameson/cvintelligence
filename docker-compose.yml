@@ -1,0 +1,41 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Serviço da Aplicação Node.js
+  app:
+    build: . # Constrói a imagem usando o Dockerfile na pasta atual
+    # image: node:20-alpine # Nomeie a imagem
+    container_name: cvintelligence-app
+    restart: unless-stopped
+    ports:
+      - "9000:5000" # Mapeia a porta 5000 do seu PC para a porta 5000 do contêiner
+    env_file:
+      - .env.docker # Carrega as variáveis de ambiente de um arquivo separado
+    # volumes:
+    #   - .:/usr/src/app # Mapeia o diretório atual do seu PC para o contêiner
+    # depends_on:
+      # - db # Garante que o contêiner do banco de dados inicie antes da aplicação
+
+  # Serviço do Banco de Dados PostgreSQL
+  # db:
+  #   image: postgres:15-alpine # Usa uma imagem oficial e leve do PostgreSQL
+  #   container_name: cvintelligence-db
+  #   restart: unless-stopped
+  #   environment:
+  #     # Essas variáveis criam o banco e o usuário inicial
+  #     POSTGRES_USER: cvintelligence_user
+  #     POSTGRES_PASSWORD: cvintelligence_password
+  #     POSTGRES_DB: cvintelligence
+  #   ports:
+  #     # Mapeia a porta 54321 do seu PC para a porta padrão 5432 do Postgres
+  #     # Permite que você se conecte ao banco com o DBeaver/pgAdmin
+  #     - "54321:5432"
+  #   volumes:
+  #     # Cria um volume para persistir os dados do banco, mesmo que o contêiner seja removido
+  #     - postgres_data:/var/lib/postgresql/data
+
+# Define o volume nomeado que será usado pelo serviço 'db'
+volumes:
+  postgres_data:

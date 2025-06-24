@@ -35,6 +35,34 @@
   --apple-error: hsl(0, 100%, 59%);
 }
 
+/* CV Example Styling */
+.cv-example {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Section Backgrounds */
+.section-bg-1 {
+  background: radial-gradient(circle at 20% 80%, hsla(207, 100%, 50%, 0.1) 0%, transparent 50%),
+              radial-gradient(circle at 80% 20%, hsla(142, 71%, 45%, 0.1) 0%, transparent 50%);
+}
+
+.glass-dark {
+  background: rgba(26, 31, 58, 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Hover Effects */
+.hover-glow:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 20px 40px hsla(207, 100%, 50%, 0.3);
+  transition: all 0.3s ease;
+}
+
+
+
 .dark {
   --background: hsl(240, 10%, 3.9%);
   --foreground: hsl(0, 0%, 98%);
@@ -150,4 +178,8 @@
       transform: translateY(-20px);
     }
   }
+}
+
+body:has([data-state='open']) {
+  padding-right: 15px; /* Ou a largura da sua barra de rolagem */
 }
