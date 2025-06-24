@@ -6,7 +6,23 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 
-// Funções de API (podem ser movidas para um arquivo central depois)
+async function sendTestEmail() {
+  const res = await fetch('/api/admin/test-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+    // ADICIONE ESTA LINHA CRUCIAL:
+    credentials: 'include',
+  });
+  
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Falha no envio do e-mail de teste');
+  }
+  return data;
+}
+
+// Funções de API
 async function fetchSettings() {
   const res = await fetch('/api/admin/settings');
   if (!res.ok) throw new Error('Falha ao carregar configurações');
@@ -21,7 +37,7 @@ async function saveSettings(settings: Record<string, any>) {
   });
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Falha ao salvar configurações');
+    throw new Error(errorData.message || 'Falha ao salvar as configurações');
   }
   return res.json();
 }
@@ -29,37 +45,11 @@ async function saveSettings(settings: Record<string, any>) {
 export default function AuthSettingsForm() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  // Estado para todos os campos do formulário
-  const [settings, setSettings] = useState({
-    GOOGLE_CLIENT_ID: '',
-    GOOGLE_CLIENT_SECRET: '',
-    EMAIL_SMTP_HOST: '',
-    EMAIL_SMTP_PORT: '',
-    EMAIL_SMTP_USER: '',
-    EMAIL_SMTP_PASSWORD: '',
-    EMAIL_FROM_ADDRESS: '',
-    ALLOW_NEW_REGISTRATIONS: true,
-    REQUIRE_EMAIL_CONFIRMATION: false,
-  });
 
   const { data: loadedSettings, isLoading } = useQuery({
     queryKey: ['adminSettings'],
     queryFn: fetchSettings,
   });
-
-  // Atualiza o estado do formulário quando os dados são carregados
-  useEffect(() => {
-    if (loadedSettings) {
-      setSettings(prev => ({
-        ...prev,
-        ...loadedSettings,
-        // Converte strings 'true'/'false' para booleano para os Switches
-        ALLOW_NEW_REGISTRATIONS: loadedSettings.ALLOW_NEW_REGISTRATIONS === 'true',
-        REQUIRE_EMAIL_CONFIRMATION: loadedSettings.REQUIRE_EMAIL_CONFIRMATION === 'true',
-      }));
-    }
-  }, [loadedSettings]);
 
   const mutation = useMutation({
     mutationFn: saveSettings,
@@ -68,98 +58,131 @@ export default function AuthSettingsForm() {
       queryClient.invalidateQueries({ queryKey: ['adminSettings'] });
     },
     onError: (error: Error) => {
-      toast({ title: "Erro", description: error.message, variant: 'destructive' });
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setSettings(prev => ({ ...prev, [name]: value }));
+  // A segunda mutação agora tem um nome único
+  const testEmailMutation = useMutation({
+    mutationFn: sendTestEmail,
+    onSuccess: (data) => {
+      toast({ title: "Envio Concluído", description: data.message });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Falha no Teste", description: error.message, variant: "destructive" });
+    }
+  });
+
+  // Apenas UMA declaração da função handleTestEmail
+  const handleTestEmail = () => {
+    toast({ title: "Enviando...", description: `Tentando enviar e-mail de teste para sua conta logada.`});
+    testEmailMutation.mutate();
   };
-  
-  const handleSwitchChange = (checked: boolean, name: string) => {
-    setSettings(prev => ({ ...prev, [name]: checked }));
-  };
+
+  // Estados individuais para cada campo
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState('');
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [emailFrom, setEmailFrom] = useState('');
+  const [allowNewRegistrations, setAllowNewRegistrations] = useState(false);
+  const [requireEmailConfirmation, setRequireEmailConfirmation] = useState(false);
+
+  // useEffect que popula todos os estados locais
+  useEffect(() => {
+    if (loadedSettings) {
+      setGoogleClientId(loadedSettings.GOOGLE_CLIENT_ID || '');
+      setGoogleClientSecret(loadedSettings.GOOGLE_CLIENT_SECRET || '');
+      setSmtpHost(loadedSettings.EMAIL_SMTP_HOST || '');
+      setSmtpPort(loadedSettings.EMAIL_SMTP_PORT || '');
+      setSmtpUser(loadedSettings.EMAIL_SMTP_USER || '');
+      setSmtpPassword(loadedSettings.EMAIL_SMTP_PASSWORD || '');
+      setEmailFrom(loadedSettings.EMAIL_FROM_ADDRESS || '');
+      setAllowNewRegistrations(String(loadedSettings.ALLOW_NEW_REGISTRATIONS) === 'true');
+      setRequireEmailConfirmation(String(loadedSettings.REQUIRE_EMAIL_CONFIRMATION) === 'true');
+    }
+  }, [loadedSettings]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(settings);
+    mutation.mutate({
+      GOOGLE_CLIENT_ID: googleClientId,
+      GOOGLE_CLIENT_SECRET: googleClientSecret,
+      EMAIL_SMTP_HOST: smtpHost,
+      EMAIL_SMTP_PORT: smtpPort,
+      EMAIL_SMTP_USER: smtpUser,
+      EMAIL_SMTP_PASSWORD: smtpPassword,
+      EMAIL_FROM_ADDRESS: emailFrom,
+      ALLOW_NEW_REGISTRATIONS: allowNewRegistrations,
+      REQUIRE_EMAIL_CONFIRMATION: requireEmailConfirmation,
+    });
   };
   
-  if (isLoading) return <p>Carregando configurações...</p>;
+  if (isLoading) return <p className="text-sm text-slate-500">Carregando...</p>;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Toggles */}
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-          <Label htmlFor="ALLOW_NEW_REGISTRATIONS">Permitir novos cadastros</Label>
-          <Switch
-            id="ALLOW_NEW_REGISTRATIONS"
-            checked={settings.ALLOW_NEW_REGISTRATIONS}
-            onCheckedChange={(checked) => handleSwitchChange(checked, 'ALLOW_NEW_REGISTRATIONS')}
-          />
+          <Label htmlFor="allowNewRegistrations" className="cursor-pointer">Permitir novos cadastros</Label>
+          <Switch id="allowNewRegistrations" checked={allowNewRegistrations} onCheckedChange={setAllowNewRegistrations} />
         </div>
         <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
-          <Label htmlFor="REQUIRE_EMAIL_CONFIRMATION">Exigir confirmação de e-mail</Label>
-          <Switch
-            id="REQUIRE_EMAIL_CONFIRMATION"
-            checked={settings.REQUIRE_EMAIL_CONFIRMATION}
-            onCheckedChange={(checked) => handleSwitchChange(checked, 'REQUIRE_EMAIL_CONFIRMATION')}
-          />
+          <Label htmlFor="requireEmailConfirmation" className="cursor-pointer">Exigir confirmação de e-mail</Label>
+          <Switch id="requireEmailConfirmation" checked={requireEmailConfirmation} onCheckedChange={setRequireEmailConfirmation} />
         </div>
       </div>
       
       {/* Google Auth */}
-      <div className="space-y-4">
+      <div className="space-y-4 rounded-lg border p-4">
         <h4 className="font-medium">Autenticação com Google</h4>
         <div>
-          <Label htmlFor="GOOGLE_CLIENT_ID">Google Client ID</Label>
-          <Input id="GOOGLE_CLIENT_ID" name="GOOGLE_CLIENT_ID" value={settings.GOOGLE_CLIENT_ID} onChange={handleInputChange} />
+          <Label htmlFor="googleId">Google Client ID</Label>
+          <Input id="googleId" value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)} />
         </div>
         <div>
-          <Label htmlFor="GOOGLE_CLIENT_SECRET">Google Client Secret</Label>
-          <Input id="GOOGLE_CLIENT_SECRET" name="GOOGLE_CLIENT_SECRET" type="password" value={settings.GOOGLE_CLIENT_SECRET} onChange={handleInputChange} />
+          <Label htmlFor="googleSecret">Google Client Secret</Label>
+          <Input id="googleSecret" type="password" value={googleClientSecret} onChange={(e) => setGoogleClientSecret(e.target.value)} />
         </div>
       </div>
 
       {/* Email SMTP */}
-    <div className="space-y-4 rounded-lg border p-4">
-    <h4 className="font-medium text-slate-800">Configurações de E-mail (SMTP)</h4>
-    <p className="text-sm text-slate-500">
-        Configurações para o envio de e-mails transacionais, como confirmação de cadastro e redefinição de senha.
-    </p>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-        <Label htmlFor="EMAIL_SMTP_HOST">Host SMTP</Label>
-        <Input id="EMAIL_SMTP_HOST" name="EMAIL_SMTP_HOST" value={settings.EMAIL_SMTP_HOST || ''} onChange={handleInputChange} placeholder="smtp.example.com" />
+      <div className="space-y-4 rounded-lg border p-4">
+        <h4 className="font-medium text-slate-800">Configurações de E-mail (SMTP)</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="smtpHost">Host SMTP</Label>
+            <Input id="smtpHost" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} placeholder="smtp.example.com" />
+          </div>
+          <div>
+            <Label htmlFor="smtpPort">Porta SMTP</Label>
+            <Input id="smtpPort" type="number" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} placeholder="587" />
+          </div>
         </div>
         <div>
-        <Label htmlFor="EMAIL_SMTP_PORT">Porta SMTP</Label>
-        <Input id="EMAIL_SMTP_PORT" name="EMAIL_SMTP_PORT" type="number" value={settings.EMAIL_SMTP_PORT || ''} onChange={handleInputChange} placeholder="587" />
+          <Label htmlFor="emailFrom">E-mail Remetente</Label>
+          <Input id="emailFrom" type="email" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} placeholder="noreply@cvintelligence.com" />
         </div>
-    </div>
-
-    <div>
-        <Label htmlFor="EMAIL_FROM_ADDRESS">E-mail Remetente</Label>
-        <Input id="EMAIL_FROM_ADDRESS" name="EMAIL_FROM_ADDRESS" type="email" value={settings.EMAIL_FROM_ADDRESS || ''} onChange={handleInputChange} placeholder="noreply@cvintelligence.com" />
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-        <Label htmlFor="EMAIL_SMTP_USER">Usuário SMTP</Label>
-        <Input id="EMAIL_SMTP_USER" name="EMAIL_SMTP_USER" value={settings.EMAIL_SMTP_USER || ''} onChange={handleInputChange} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="smtpUser">Usuário SMTP</Label>
+            <Input id="smtpUser" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="smtpPassword">Senha SMTP</Label>
+            <Input id="smtpPassword" type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} />
+          </div>
         </div>
-        <div>
-        <Label htmlFor="EMAIL_SMTP_PASSWORD">Senha SMTP</Label>
-        <Input id="EMAIL_SMTP_PASSWORD" name="EMAIL_SMTP_PASSWORD" type="password" value={settings.EMAIL_SMTP_PASSWORD || ''} onChange={handleInputChange} />
-        </div>
-    </div>
-    </div>
+        <Button type="button" variant="outline" size="sm" onClick={handleTestEmail} disabled={testEmailMutation.isPending}>
+          {testEmailMutation.isPending ? 'Enviando...' : 'Testar Configuração'}
+        </Button>
+      </div>
 
       <Button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? 'Salvando...' : 'Salvar Configurações de Autenticação'}
+        {mutation.isPending ? 'Salvando...' : 'Salvar Configurações'}
       </Button>
     </form>
   );

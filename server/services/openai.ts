@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleAIFileManager } from "@google/generative-ai/server";
 import { storage } from "../storage";
+import fs from "fs";
+import { analysisResultSchema } from "../../shared/schema";
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error("GEMINI_API_KEY environment variable is required");
@@ -8,8 +11,8 @@ if (!process.env.GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 interface CvAnalysisResult {
-  isResume: boolean;
   score: number;
+  detectedSections: string[];
   overallFeedback: string;
   strengths: string[];
   weaknesses: string[];
@@ -38,131 +41,154 @@ interface CvAnalysisResult {
     skills: number;
     formatting: number;
   };
+  extractedData: {
+    name: string;
+    email: string;
+    phone: string;
+    summary: string;
+    recentExperience: string;
+  };
+  comparativeFeedback?: { // <-- Objeto opcional
+    improvementsMade: string[];
+    pointsToStillImprove: string[];
+  };
 }
 
 export const DEFAULT_CV_ANALYSIS_PROMPT = `
-    **PERSONA:** Você é um Recrutador Sênior e Especialista em Carreiras, com vasta experiência em avaliar currículos para diversos setores do mercado de trabalho no Brasil. Sua tarefa é analisar o currículo a seguir com um olhar crítico, imparcial e construtivo.
+**PERSONA:** Você é um Recrutador Sênior e Especialista em Carreiras...
 
-    **TAREFA:** Analise o documento e forneça um feedback estruturado, estritamente no formato JSON.
+**TAREFA:**
+Sua primeira tarefa é extrair as seguintes informações-chave do currículo: o nome completo do candidato, seu principal e-mail, seu principal telefone, o parágrafo de resumo/objetivo profissional, e a descrição completa de sua experiência de trabalho mais recente. Se um campo não for encontrado, retorne uma string vazia ("").
+Depois, prossiga com a análise completa baseada na rubrica. Sempre inclua nome da pessoa do curriculo no feedback.
 
-    **ETAPA 1: Validação do Conteúdo**
-    Primeiro, valide se o texto fornecido parece ser um currículo profissional. Se for claramente outro tipo de documento (uma nota fiscal, um artigo, uma receita, etc.), retorne imediatamente com "isResume": false e os outros campos vazios ou com valores padrão.
-
-    **ETAPA 2: Análise e Pontuação (SOMENTE se for um currículo)**
-    Se "isResume" for true, avalie o currículo com base na rubrica abaixo. A pontuação final é a soma dos pontos de cada critério.
-
-    **Rubrica de Pontuação (Total Máximo: 100 pontos):**
+**Rubrica de Pontuação (Total Máximo: 100 pontos):**
     - Clareza e Objetividade (Máx 15 pts)
     - Impacto e Resultados na Experiência (Máx 30 pts)
     - Relevância para a Vaga (Máx 25 pts)
     - Habilidades e Competências (Máx 15 pts)
     - Formatação e Profissionalismo (Máx 15 pts)
 
-    **ETAPA 3: Geração da Resposta JSON**
-    Retorne APENAS o objeto JSON abaixo.
+**ETAPA ADICIONAL: Análise Comparativa (se aplicável)**
+Se dados de uma análise anterior forem fornecidos, compare o currículo atual com as fraquezas e sugestões da versão antiga. Liste quais pontos foram melhorados e quais ainda precisam de atenção.
 
-    {
-      "isResume": boolean,
-      "score": number (0-100, se não for currículo, retorne 0),
-      "scoreDetails": {
-        "clarity": number,       // Pontos para Clareza e Objetividade (0-15)
-        "experienceImpact": number, // Pontos para Impacto e Resultados (0-30)
-        "relevance": number,     // Pontos para Relevância para a Vaga (0-25)
-        "skills": number,        // Pontos para Habilidades e Competências (0-15)
-        "formatting": number     // Pontos para Formatação e Profissionalismo (0-15)
-      },
-      "overallFeedback": "string",
-      "strengths": ["array de strings"],
-      "weaknesses": ["array de strings"],
-      "suggestions": [
-        {
-          "category": "string",
-          "recommendation": "string",
-          "priority": "high|medium|low"
-        }
-      ],
-      "keywordOptimization": {
-        "missing": ["array de strings"],
-        "present": ["array de strings"]
-      },
-      "actionableExamples": [
-        {
-          "before": "string",
-          "after": "string",
-          "explanation": "string"
-        }
-      ],
-      "formatFeedback": {
-        "rating": number (1-5),
-        "comments": ["array de strings"]
-      }
-    }
+**FORMATO DE SAÍDA OBRIGATÓRIO (APENAS O OBJETO JSON):**
+{
+  "extractedData": {
+    "name": "string - O nome completo encontrado no currículo",
+    "email": "string - O e-mail de contato encontrado",
+    "phone": "string - O telefone de contato encontrado",
+    "summary": "string - O parágrafo de resumo ou objetivo profissional do candidato",
+    "recentExperience": "string - A descrição da experiência de trabalho mais recente listada"
+  },
+  "score": number,
+  "scoreDetails": { "clarity": number, "experienceImpact": number, "relevance": number, "skills": number, "formatting": number },
+  "overallFeedback": "string",
+  "strengths": ["string"],
+  "weaknesses": ["string"],
+  "suggestions": [{"category": "string", "recommendation": "string", "priority": "high|medium|low"}],
+  "keywordOptimization": { "missing": ["string"], "present": ["string"] },
+  "actionableExamples": [{"before": "string", "after": "string", "explanation": "string"}],
+  "formatFeedback": { "rating": number, "comments": ["string"] }
+  "comparativeFeedback": {
+    "improvementsMade": ["array de strings descrevendo melhorias aplicadas"],
+    "pointsToStillImprove": ["array de strings com sugestões antigas que ainda são válidas"]
+  },
+}
 
-    **Contexto:**
-    - Vaga Alvo: __TARGET_ROLE__
-    - Nome do Arquivo: __FILE_NAME__
-    **Conteúdo do Currículo (em base64):**
-    __FILE_CONTENT__
-  `;
 
-export async function analyzeCv(fileContent: string, fileName: string, targetRole?: string): Promise<CvAnalysisResult> {
+
+**Contexto Adicional:**
+- Vaga Alvo: __TARGET_ROLE__
+- Nome do Arquivo: __FILE_NAME__
+**DADOS DA ANÁLISE ANTERIOR (se aplicável, senão ignore):**
+__PREVIOUS_ANALYSIS__
+`;
+
+export async function analyzeCv(filePath: string, mimeType: string, fileName: string, targetRole?: string, previousAnalysis?: CvAnalysis): Promise<CvAnalysisResult> {
+  let uploadedFile;
   try {
-    // 1. Busca a chave da API do banco de dados
     const apiKey = await storage.getSetting('GEMINI_API_KEY');
-    if (!apiKey) {
-      throw new Error("Chave da API Gemini não configurada no painel de admin.");
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+      throw new Error("Chave da API Gemini não configurada corretamente no painel de admin.");
     }
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const apiKeyTrimmed = apiKey.trim();
 
-    // 2. Busca o nome do modelo do banco de dados
+    const genAI = new GoogleGenerativeAI(apiKeyTrimmed);
+    const fileManager = new GoogleAIFileManager(apiKeyTrimmed);
+
     const modelName = await storage.getSetting('GEMINI_MODEL_NAME');
     const model = genAI.getGenerativeModel({ model: modelName || "gemini-1.5-flash" });
 
-    // 3. Busca o prompt do banco de dados
+    uploadedFile = await fileManager.uploadFile(filePath, {
+      mimeType,
+      displayName: fileName,
+    });
+    
+    let previousAnalysisData = "Nenhuma análise anterior fornecida.";
+
+    if (previousAnalysis) {
+      // Usamos o safeParse para validar o objeto de tipo 'unknown'
+      const parsedResult = analysisResultSchema.safeParse(previousAnalysis.analysisResult);
+
+      if (parsedResult.success) {
+        // Se a validação passar, o TypeScript agora sabe que parsedResult.data tem as propriedades que queremos!
+        const weaknesses = parsedResult.data.weaknesses || [];
+        const suggestions = parsedResult.data.suggestions || [];
+
+        previousAnalysisData = `Fraquezas Anteriores: ${JSON.stringify(weaknesses)}. Sugestões Anteriores: ${JSON.stringify(suggestions)}`;
+      }
+    }
+
+    // O CÓDIGO ABAIXO AGORA EXECUTA INDEPENDENTEMENTE DO 'if' ACIMA.
     const customPrompt = await storage.getSetting('GEMINI_PROMPT_CV_ANALYSIS');
     const promptTemplate = customPrompt || DEFAULT_CV_ANALYSIS_PROMPT;
 
-    // O resto da lógica continua como antes...
     const prompt = promptTemplate
       .replace('__TARGET_ROLE__', targetRole || "Não especificada")
       .replace('__FILE_NAME__', fileName)
-      .replace('__FILE_CONTENT__', fileContent.substring(0, 4000) + '...');
+      .replace('__PREVIOUS_ANALYSIS__', previousAnalysisData);
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const analysisText = response.text();
 
-    if (!analysisText) {
-      throw new Error("Resposta vazia da API Gemini");
-    }
+    // Busca a configuração de temperatura do banco
+    const temperatureSetting = await storage.getSetting('AI_TEMPERATURE');
 
-    // Extract JSON from response (Gemini might include extra text)
-    const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("Resposta inválida da API, não contém JSON:", analysisText);
-      throw new Error("Formato de resposta inválido da API Gemini");
-    }
+    // Converte para número. Se não existir, usa 0.2 como padrão.
+    const temperature = temperatureSetting ? parseFloat(temperatureSetting) : 0.2;
     
-    const analysis: CvAnalysisResult = JSON.parse(jsonMatch[0]);
-    
-    // Validação e sanitização da resposta da IA
-    if (typeof analysis.score !== 'number' || analysis.score < 0 || analysis.score > 100) {
-      analysis.score = 0;
-    }
-    if (!Array.isArray(analysis.actionableExamples)) analysis.actionableExamples = [];
+    const result = await model.generateContent({
+      contents: [{
+        role: "user",
+        parts: [
+          { text: prompt },
+          { fileData: { mimeType: uploadedFile.file.mimeType, fileUri: uploadedFile.file.uri } }
+        ]
+      }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: temperature
+      },
+    });
 
-    if (!analysis.formatFeedback) {
-      analysis.formatFeedback = { rating: 3, comments: ["Análise de formato indisponível."] };
-    }
-
-    if (!analysis.scoreDetails) {
-      analysis.scoreDetails = { clarity: 0, experienceImpact: 0, relevance: 0, skills: 0, formatting: 0 };
-    }
+    const response = result.response;
+    const analysis: CvAnalysisResult = JSON.parse(response.text());
 
     return analysis;
 
   } catch (error) {
-    console.error("Error analyzing CV with Gemini:", error);
+    console.error("ERRO na função analyzeCv:", error);
     throw new Error("Falha na comunicação com a IA para analisar o currículo.");
+  } finally {
+    if (uploadedFile?.file?.name) {
+      try {
+        const apiKey = await storage.getSetting('GEMINI_API_KEY');
+        if (apiKey) {
+          const fileManagerForDelete = new GoogleAIFileManager(apiKey.trim());
+          await fileManagerForDelete.deleteFile(uploadedFile.file.name);
+          console.log('[FINALLY] Arquivo temporário da IA deletado com sucesso.');
+        }
+      } catch (deleteError) {
+        console.error("[FINALLY] Erro ao deletar o arquivo temporário da IA:", deleteError);
+      }
+    }
   }
 }

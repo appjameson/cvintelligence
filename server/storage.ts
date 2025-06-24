@@ -26,6 +26,7 @@ const scryptAsync = promisify(scrypt);
 
 // Interface for storage operations
 export interface IStorage {
+  
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -41,22 +42,33 @@ export interface IStorage {
   getCvAnalysis(id: number): Promise<CvAnalysis | undefined>;
 
   logCreditPurchase(data: InsertCreditPurchase): Promise<void>;
+  getLatestUserAnalysis(userId: string): Promise<CvAnalysis | undefined>;
 }
 
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
-}
+  async function hashPassword(password: string): Promise<string> {
+    const salt = randomBytes(16).toString("hex");
+    const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+    return `${buf.toString("hex")}.${salt}`;
+  }
 
-async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
-}
+  async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
+    const [hashed, salt] = stored.split(".");
+    const hashedBuf = Buffer.from(hashed, "hex");
+    const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+    return timingSafeEqual(hashedBuf, suppliedBuf);
+  }
 
 export class DatabaseStorage implements IStorage {
+
+  async getLatestUserAnalysis(userId: string): Promise<CvAnalysis | undefined> {
+    const [latest] = await db
+      .select()
+      .from(cvAnalyses)
+      .where(eq(cvAnalyses.userId, userId))
+      .orderBy(desc(cvAnalyses.createdAt))
+      .limit(1);
+    return latest;
+  }
 
   async logCreditPurchase(data: InsertCreditPurchase): Promise<void> {
     await db.insert(creditPurchases).values(data);
@@ -107,7 +119,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db.execute(query);
     return result.rows;
   }
-
 
   async getAverageScore(): Promise<number> {
     const [result] = await db.select({ value: avg(cvAnalyses.score) }).from(cvAnalyses);

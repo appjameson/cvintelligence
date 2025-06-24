@@ -1,3 +1,4 @@
+import ResumeHighlightsCard from "@/components/ResumeHighlightsCard";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import ActionableExampleCard from "@/components/ActionableExampleCard";
+import ComparativeFeedbackCard from "@/components/ComparativeFeedbackCard";
 import { 
   ArrowLeft, 
   FileText, 
@@ -55,6 +57,18 @@ interface CvAnalysis {
       relevance: number;
       skills: number;
       formatting: number;
+    };
+    extractedData: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      summary?: string;
+      recentExperience?: string;
+    };
+    // ADICIONE A PROPRIEDADE OPCIONAL AQUI:
+    comparativeFeedback?: {
+      improvementsMade: string[];
+      pointsToStillImprove: string[];
     };
   };
 }
@@ -219,6 +233,25 @@ export default function Analysis() {
             </CardContent>
           </Card>
         </motion.div>
+        
+        {/* Resumo Extraído pela IA */}
+        {analysis.analysisResult.extractedData && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="mb-8">
+            <ResumeHighlightsCard data={analysis.analysisResult.extractedData} />
+          </motion.div>
+        )}
+
+        {/* Card de Análise Comparativa - AGORA CORRIGIDO */}
+        {analysis.analysisResult.comparativeFeedback && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mb-8" // Removido o 'mt-8' duplicado
+          >
+            <ComparativeFeedbackCard data={analysis.analysisResult.comparativeFeedback} />
+          </motion.div> // A tag de fechamento estava implícita ou faltando
+        )}
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Strengths */}

@@ -101,6 +101,37 @@ async function requireAdmin(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  app.post('/api/admin/test-email', requireAuth, requireAdmin, async (req: any, res) => {
+  try {
+    // 1. Pega o ID do usuário da sessão, que já foi validada pelos middlewares
+    const userId = req.session.userId;
+    const user = await storage.getUser(userId);
+
+    // 2. Garante que o usuário e o e-mail dele foram encontrados
+    if (!user || !user.email) {
+      return res.status(404).json({ message: "Usuário administrador logado ou e-mail não encontrado." });
+    }
+
+    // 3. Usa o e-mail do próprio usuário logado como destinatário
+    await sendEmail({
+      to: user.email,
+      subject: '✅ Teste de Configuração de E-mail - CVIntelligence',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px;">
+          <h2>Olá, ${user.firstName}!</h2>
+          <p>Se você recebeu este e-mail, suas configurações de SMTP no painel de admin do CVIntelligence estão funcionando perfeitamente.</p>
+        </div>
+      `,
+    });
+
+    res.status(200).json({ message: `E-mail de teste enviado com sucesso para ${user.email}!` });
+
+  } catch (error) {
+    console.error("Test email failed:", error);
+    res.status(500).json({ message: 'Falha ao enviar e-mail de teste.', error: error instanceof Error ? error.message : String(error) });
+  }
+});
   // Setup local authentication
   setupLocalAuth(app);
 
@@ -109,24 +140,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/settings', requireAuth, requireAdmin, async (req, res) => {
     try {
-      // Busca as configurações do banco
-      let geminiKey = await storage.getSetting('GEMINI_API_KEY');
-      let stripeKey = await storage.getSetting('STRIPE_SECRET_KEY');
-      let geminiPrompt = await storage.getSetting('GEMINI_PROMPT_CV_ANALYSIS');
-      let geminiModel = await storage.getSetting('GEMINI_MODEL_NAME');
+      // 1. Define a lista de TODAS as chaves de configuração que queremos buscar.
+      const settingsKeys = [
+        'GEMINI_API_KEY', 
+        'STRIPE_SECRET_KEY', 
+        'GEMINI_PROMPT_CV_ANALYSIS', 
+        'GEMINI_MODEL_NAME',
+        'AI_TEMPERATURE',
+        'GOOGLE_CLIENT_ID', 
+        'GOOGLE_CLIENT_SECRET', 
+        'EMAIL_SMTP_HOST', 
+        'EMAIL_SMTP_PORT',
+        'EMAIL_SMTP_USER', 
+        'EMAIL_SMTP_PASSWORD',
+        'EMAIL_FROM_ADDRESS', 
+        'ALLOW_NEW_REGISTRATIONS', 
+        'REQUIRE_EMAIL_CONFIRMATION'
+      ];
 
-      // Se não houver um prompt salvo no banco, usamos o padrão do código
-      if (!geminiPrompt) {
-        geminiPrompt = DEFAULT_CV_ANALYSIS_PROMPT;
-      }
+      // 2. Busca todas as configurações do banco de uma só vez.
+      const settingsPromises = settingsKeys.map(key => storage.getSetting(key));
+      const settingsValues = await Promise.all(settingsPromises);
+      
+      // 3. Monta o objeto de resposta final.
+      const settings = settingsKeys.reduce((obj, key, index) => {
+        // A chave no objeto será a mesma do array (ex: 'EMAIL_SMTP_HOST')
+        // O valor será o que veio do banco de dados.
+        obj[key] = settingsValues[index];
+        return obj;
+      }, {} as Record<string, string | null>);
 
-      res.json({
-        GEMINI_API_KEY: geminiKey,
-        STRIPE_SECRET_KEY: stripeKey,
-        GEMINI_PROMPT_CV_ANALYSIS: geminiPrompt,
-        GEMINI_MODEL_NAME: geminiModel,
-      });
-    } catch (error) { // <-- O bloco CATCH que estava faltando ou no lugar errado
+      // 4. Envia o objeto JSON completo para o frontend.
+      res.json(settings);
+
+    } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ message: 'Erro ao buscar configurações.' });
     }
@@ -270,78 +317,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // CV Analysis routes
   app.post('/api/upload-cv', requireAuth, upload.single('cv'), async (req: any, res) => {
-    try {
-      const userId = req.session.userId;
-      const user = await storage.getUser(userId);
-      
-      if (!user) {
-        return res.status(404).json({ message: "Usuário não encontrado" });
-      }
+  // A variável 'filePath' é declarada aqui para ser acessível no 'finally'
+  let filePath: string | undefined = req.file?.path;
 
-      if (user.credits <= 0) {
-        return res.status(402).json({ 
-          message: "Créditos insuficientes. Adquira mais créditos para continuar.",
-          needsPayment: true 
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({ message: "Nenhum arquivo enviado" });
-      }
-
-      // Read file content
-      const filePath = req.file.path;
-      const fileContent = fs.readFileSync(filePath, 'base64');
-      
-      // Analyze CV with OpenAI
-      const analysis = await analyzeCv(fileContent, req.file.originalname, req.body.targetRole);
-
-      if (!analysis.isResume) {
-        // Limpa o arquivo enviado
-        fs.unlinkSync(filePath);
-        // Retorna um erro para o usuário
-        return res.status(400).json({ message: "O arquivo enviado não parece ser um currículo." });
-      }
-      
-      // Save analysis to database
-      const cvAnalysis = await storage.createCvAnalysis({
-        userId,
-        fileName: req.file.originalname,
-        fileSize: req.file.size,
-        analysisResult: analysis,
-        score: analysis.score,
-        suggestions: analysis.suggestions,
-      });
-
-      // Update user credits
-      await storage.updateUserCredits(userId, user.credits - 1);
-
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
-
-      res.json({
-        analysisId: cvAnalysis.id,
-        analysis,
-        creditsRemaining: user.credits - 1
-      });
-
-    } catch (error) {
-      console.error("Error analyzing CV:", error);
-      
-      // Clean up file if it exists
-      if (req.file?.path) {
-        try {
-          fs.unlinkSync(req.file.path);
-        } catch (cleanupError) {
-          console.error("Error cleaning up file:", cleanupError);
-        }
-      }
-      
-      res.status(500).json({ 
-        message: error instanceof Error ? error.message : "Erro ao analisar currículo" 
-      });
+  try {
+    // --- CORREÇÃO: DECLARAR 'userId' E 'user' PRIMEIRO ---
+    const userId = req.session.userId;
+    if (!userId) {
+      // Esta verificação é uma segurança extra
+      return res.status(401).json({ message: "Sessão inválida ou não encontrada." });
     }
-  });
+    const user = await storage.getUser(userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (user.credits <= 0) {
+      return res.status(402).json({ message: "Créditos insuficientes." });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Nenhum arquivo enviado" });
+    }
+    
+    // Agora que temos o filePath definitivo, o usamos.
+    filePath = req.file.path;
+
+    if (!filePath) {
+      // Isso garante para o TypeScript que filePath não é undefined daqui para frente
+      return res.status(500).json({ message: "Não foi possível encontrar o caminho do arquivo salvo." });
+    }
+    
+    const latestAnalysis = await storage.getLatestUserAnalysis(userId);
+
+    const analysis = await analyzeCv(
+      filePath, 
+      req.file.mimetype,
+      req.file.originalname, 
+      req.body.targetRole,
+      latestAnalysis
+    );
+    
+    const cvAnalysis = await storage.createCvAnalysis({
+      userId,
+      previousAnalysisId: latestAnalysis?.id,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      analysisResult: analysis,
+      score: analysis.score ?? 0,
+      suggestions: analysis.suggestions ?? [],
+    });
+
+    const updatedUser = await storage.updateUserCredits(userId, user.credits - 1);
+
+    // Limpa o arquivo local APENAS se tudo deu certo
+    if (filePath) fs.unlinkSync(filePath);
+    filePath = undefined; // Marca como indefinido para não ser deletado de novo no 'finally'
+
+    res.json({
+      analysisId: cvAnalysis.id,
+      analysis,
+      creditsRemaining: updatedUser.credits
+    });
+
+  } catch (error) {
+    console.error("Error in /api/upload-cv route:", error);
+    res.status(500).json({ message: error instanceof Error ? error.message : "Erro ao analisar currículo" });
+  } finally {
+    // Garante que o arquivo local seja deletado em caso de erro
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+});
 
   app.get('/api/analyses', requireAuth, async (req: any, res) => {
     try {
