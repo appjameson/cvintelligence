@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,29 @@ export default function Checkout() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+
+  // Fetch dynamic credit packages from API
+  const { data: dynamicPackages = [], isLoading: isLoadingPackages } = useQuery({
+    queryKey: ['creditPackages'],
+    queryFn: async () => {
+      const res = await fetch('/api/credit-packages');
+      if (!res.ok) throw new Error('Erro ao carregar pacotes');
+      return res.json();
+    },
+  });
+
+  // Use dynamic packages if available, otherwise fallback to static ones
+  const creditPackages = dynamicPackages.length > 0 ? dynamicPackages : [];
+
+  // Check if Stripe is enabled
+  const { data: authConfig } = useQuery({
+    queryKey: ['authConfig'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth-config');
+      if (!res.ok) throw new Error('Failed to fetch auth config');
+      return res.json();
+    },
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {

@@ -6,9 +6,10 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ApiSettingsForm from "@/components/ApiSettingsForm";
 import PromptSettingsForm from "@/components/PromptSettingsForm";
+import PaymentSettingsForm from "@/components/PaymentSettingsForm";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LayoutDashboard, KeyRound, Bot, Users, ScanLine, Star, UserPlus, Settings, ShoppingCart } from "lucide-react"; // Adicione ShoppingCart aqui
+import { LayoutDashboard, KeyRound, Bot, Users, ScanLine, Star, UserPlus, Settings, ShoppingCart } from "lucide-react";
 import DatabaseStatus from "@/components/DatabaseStatus";
 import UserChart from '@/components/UserChart';
 import AuthSettingsForm from "@/components/AuthSettingsForm";
@@ -183,6 +184,18 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="pt-6">
               <AuthSettingsForm />
+            </CardContent>
+          </Card>
+          
+          <Card className="apple-shadow lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center text-xl">
+                <ShoppingCart className="mr-3 text-blue-500" />
+                Configurações de Pagamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <PaymentSettingsForm />
             </CardContent>
           </Card>
         </div>

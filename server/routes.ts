@@ -529,6 +529,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 });
 
+  // Admin routes for settings
+  app.get('/api/admin/auth-settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const settings = {
+        GOOGLE_AUTH_ENABLED: await storage.getSetting('GOOGLE_AUTH_ENABLED') || 'true',
+        EMAIL_HOST: await storage.getSetting('EMAIL_HOST') || '',
+        EMAIL_PORT: await storage.getSetting('EMAIL_PORT') || '',
+        EMAIL_SECURE: await storage.getSetting('EMAIL_SECURE') || 'true',
+        EMAIL_USER: await storage.getSetting('EMAIL_USER') || '',
+        EMAIL_PASSWORD: await storage.getSetting('EMAIL_PASSWORD') || '',
+      };
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching auth settings:", error);
+      res.status(500).json({ message: 'Erro ao buscar configurações de autenticação' });
+    }
+  });
+
+  app.put('/api/admin/auth-settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const settings = req.body;
+      
+      for (const [key, value] of Object.entries(settings)) {
+        await storage.updateSetting(key, value as string);
+      }
+      
+      res.json({ message: 'Configurações de autenticação salvas com sucesso' });
+    } catch (error) {
+      console.error("Error saving auth settings:", error);
+      res.status(500).json({ message: 'Erro ao salvar configurações de autenticação' });
+    }
+  });
+
+  // Payment settings routes
+  app.get('/api/admin/payment-settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const settings = {
+        STRIPE_ENABLED: await storage.getSetting('STRIPE_ENABLED') || 'false',
+        STRIPE_SECRET_KEY: await storage.getSetting('STRIPE_SECRET_KEY') || '',
+        VITE_STRIPE_PUBLIC_KEY: await storage.getSetting('VITE_STRIPE_PUBLIC_KEY') || '',
+        STRIPE_PRICE_ID: await storage.getSetting('STRIPE_PRICE_ID') || '',
+        STRIPE_SUBSCRIPTION_PRICE_ID: await storage.getSetting('STRIPE_SUBSCRIPTION_PRICE_ID') || '',
+        STRIPE_WEBHOOKS_SECRET: await storage.getSetting('STRIPE_WEBHOOKS_SECRET') || '',
+        
+        CREDIT_BASIC_NAME: await storage.getSetting('CREDIT_BASIC_NAME') || '',
+        CREDIT_BASIC_CREDITS: await storage.getSetting('CREDIT_BASIC_CREDITS') || '',
+        CREDIT_BASIC_PRICE: await storage.getSetting('CREDIT_BASIC_PRICE') || '',
+        CREDIT_BASIC_DESCRIPTION: await storage.getSetting('CREDIT_BASIC_DESCRIPTION') || '',
+        
+        CREDIT_PREMIUM_NAME: await storage.getSetting('CREDIT_PREMIUM_NAME') || '',
+        CREDIT_PREMIUM_CREDITS: await storage.getSetting('CREDIT_PREMIUM_CREDITS') || '',
+        CREDIT_PREMIUM_PRICE: await storage.getSetting('CREDIT_PREMIUM_PRICE') || '',
+        CREDIT_PREMIUM_DESCRIPTION: await storage.getSetting('CREDIT_PREMIUM_DESCRIPTION') || '',
+        
+        CREDIT_ULTIMATE_NAME: await storage.getSetting('CREDIT_ULTIMATE_NAME') || '',
+        CREDIT_ULTIMATE_CREDITS: await storage.getSetting('CREDIT_ULTIMATE_CREDITS') || '',
+        CREDIT_ULTIMATE_PRICE: await storage.getSetting('CREDIT_ULTIMATE_PRICE') || '',
+        CREDIT_ULTIMATE_DESCRIPTION: await storage.getSetting('CREDIT_ULTIMATE_DESCRIPTION') || '',
+      };
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching payment settings:", error);
+      res.status(500).json({ message: 'Erro ao buscar configurações de pagamento' });
+    }
+  });
+
+  app.put('/api/admin/payment-settings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const settings = req.body;
+      
+      for (const [key, value] of Object.entries(settings)) {
+        await storage.updateSetting(key, value as string);
+      }
+      
+      res.json({ message: 'Configurações de pagamento salvas com sucesso' });
+    } catch (error) {
+      console.error("Error saving payment settings:", error);
+      res.status(500).json({ message: 'Erro ao salvar configurações de pagamento' });
+    }
+  });
+
+  // Get credit packages for checkout page - dynamic based on admin settings
+  app.get('/api/credit-packages', async (req, res) => {
+    try {
+      const packages = [
+        {
+          id: 'basic',
+          name: await storage.getSetting('CREDIT_BASIC_NAME') || 'Pacote Básico',
+          credits: parseInt(await storage.getSetting('CREDIT_BASIC_CREDITS') || '5'),
+          price: parseInt(await storage.getSetting('CREDIT_BASIC_PRICE') || '990'),
+          description: await storage.getSetting('CREDIT_BASIC_DESCRIPTION') || 'Perfeito para análises ocasionais',
+          features: ['Análises de CV', 'Relatório detalhado', 'Suporte por email']
+        },
+        {
+          id: 'premium',
+          name: await storage.getSetting('CREDIT_PREMIUM_NAME') || 'Pacote Premium',
+          credits: parseInt(await storage.getSetting('CREDIT_PREMIUM_CREDITS') || '15'),
+          price: parseInt(await storage.getSetting('CREDIT_PREMIUM_PRICE') || '2490'),
+          description: await storage.getSetting('CREDIT_PREMIUM_DESCRIPTION') || 'Melhor custo-benefício',
+          popular: true,
+          features: ['Análises de CV', 'Relatório detalhado', 'Comparação com CVs anteriores', 'Suporte prioritário']
+        },
+        {
+          id: 'ultimate',
+          name: await storage.getSetting('CREDIT_ULTIMATE_NAME') || 'Pacote Ultimate',
+          credits: parseInt(await storage.getSetting('CREDIT_ULTIMATE_CREDITS') || '30'),
+          price: parseInt(await storage.getSetting('CREDIT_ULTIMATE_PRICE') || '4990'),
+          description: await storage.getSetting('CREDIT_ULTIMATE_DESCRIPTION') || 'Para uso intensivo',
+          features: ['Análises de CV', 'Todos os recursos Premium', 'Análise personalizada', 'Consultoria 1:1']
+        }
+      ];
+      
+      res.json(packages);
+    } catch (error) {
+      console.error("Error fetching credit packages:", error);
+      res.status(500).json({ message: 'Erro ao buscar pacotes de crédito' });
+    }
+  });
+
+  // Public endpoint to check if Google Auth is enabled
+  app.get('/api/auth-config', async (req, res) => {
+    try {
+      const googleAuthEnabled = await storage.getSetting('GOOGLE_AUTH_ENABLED') || 'true';
+      const stripeEnabled = await storage.getSetting('STRIPE_ENABLED') || 'false';
+      
+      res.json({
+        googleAuthEnabled: googleAuthEnabled === 'true',
+        stripeEnabled: stripeEnabled === 'true'
+      });
+    } catch (error) {
+      console.error("Error fetching auth config:", error);
+      res.status(500).json({ message: 'Erro ao buscar configurações de autenticação' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
